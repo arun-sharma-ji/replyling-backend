@@ -1,5 +1,9 @@
 import mongoose from "mongoose";
 
+// Inactive device records are removed after this long (anti-abuse data should
+// not be kept forever). Keep the privacy policy in step if you change it.
+export const DEVICE_RECORD_TTL_DAYS = 365;
+
 // Free-tier usage per DEVICE, so deleting/reinstalling the app or creating
 // extra accounts on one phone can't mint more free translations. The raw
 // device id (iOS Keychain install id / Android ID) is never stored — only an
@@ -32,9 +36,20 @@ const deviceUsageSchema = new mongoose.Schema(
       index: true,
     },
 
+    // One-time bonus reset already used on this device (any account). Set
+    // together with the account flag so a new/guest account on the same phone
+    // can't claim it again. Never cleared.
+    bonusResetClaimedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // Also drives the automatic expiry below: a device not seen for
+    // DEVICE_RECORD_TTL_DAYS is dropped by MongoDB itself.
     lastSeenAt: {
       type: Date,
       default: Date.now,
+      index: { expireAfterSeconds: DEVICE_RECORD_TTL_DAYS * 24 * 60 * 60 },
     },
   },
   {

@@ -307,10 +307,10 @@ const deleteAccount = async (req, res) => {
     const surveyDeleteResult = await PurchaseSurvey.deleteMany({ uid });
     console.log(`[deleteAccount] Survey deletion result:`, surveyDeleteResult);
 
-    // Device-level usage records: unlink this account and drop records no
-    // account belongs to any more (only a hash was ever stored).
+    // Device-level usage records: unlink this account (the anti-abuse record itself
+    // is kept so deleting + re-signing up cannot mint free credits; only a hash is stored).
     const deviceRecordsDeleted = await removeUidFromDeviceUsage(uid);
-    console.log(`[deleteAccount] Device usage records deleted:`, deviceRecordsDeleted);
+    console.log(`[deleteAccount] Device usage records unlinked:`, deviceRecordsDeleted);
 
     res.status(200).json({
       success: true,

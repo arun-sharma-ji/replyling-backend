@@ -31,10 +31,16 @@ export async function touchDeviceUsage({ deviceHash, platform, uid }) {
   }
 }
 
-// Called on account deletion: unlink this uid from every device record and
-// drop records that no longer belong to any account.
+// Called on account deletion: unlink this uid from every device record so
+// nothing ties the record to the deleted person any more.
+//
+// The record itself is deliberately KEPT (hashed device id + free-credits-used
+// counter + one-time-bonus mark, no account link). If it were deleted, deleting
+// the account and signing up again on the same phone would hand out fresh free
+// credits and a second one-time bonus. Records expire on their own after
+// DEVICE_RECORD_TTL_DAYS without use (see models/DeviceUsage.js). This is
+// disclosed in the privacy policy (anti-abuse, not tied to an account).
 export async function removeUidFromDeviceUsage(uid) {
-  await DeviceUsage.updateMany({ uids: uid }, { $pull: { uids: uid } });
-  const result = await DeviceUsage.deleteMany({ uids: { $size: 0 } });
-  return result.deletedCount || 0;
+  const result = await DeviceUsage.updateMany({ uids: uid }, { $pull: { uids: uid } });
+  return result.modifiedCount || 0;
 }

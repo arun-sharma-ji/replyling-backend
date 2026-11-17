@@ -38,6 +38,26 @@ estimatedCostUsd: {
   default: 0,
 },
 
+    // Text translations (typed / pasted / dictated / text replies) used on
+    // textDailyDate. Same cap for free and premium; independent of the voice
+    // credits above. See services/textDailyLimit.service.js.
+    textDailyCount: {
+      type: Number,
+      default: 0,
+    },
+    // UTC day the counter belongs to, "YYYY-MM-DD".
+    textDailyDate: {
+      type: String,
+      default: null,
+    },
+
+    // One-time "try it more" bonus: set when this account claimed its free-limit
+    // reset (see services/bonusCredits.service.js). Never cleared.
+    bonusResetClaimedAt: {
+      type: Date,
+      default: null,
+    },
+
     // Last reset of premiumDailyCredits (free credits don't reset).
     lastReset: {
       type: Date,

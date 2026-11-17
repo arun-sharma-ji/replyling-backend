@@ -13,6 +13,15 @@ import { parseBuffer } from "music-metadata";
 import { trimAudioBuffer } from "../services/audioTrim.service.js";
 import TranslateCharge from "../models/TranslateCharge.js";
 import { getIdempotencyKey } from "../utils/idempotency.js";
+import {
+  claimTextSlot,
+  refundTextSlot,
+} from "../services/textDailyLimit.service.js";
+
+// Sanity guard on typed/pasted text (abuse protection, not a product limit).
+const MAX_TEXT_CHARS = 2000;
+// Dictation clips are short; this also keeps us under Vercel's 4.5MB body cap.
+const MAX_DICTATION_BYTES = 4 * 1024 * 1024;
 
 // Was capped at 60s, but "Audio too long" turned out to be the single
 // largest translation-failure category in production (38.5% of failures) —
@@ -272,6 +281,119 @@ export const translateMessage = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Translation failed.",
+      errorCode: error.errorCode || "SERVER_ERROR",
+    });
+  }
+};
+/* ------------------------------------------------------------------ */
+/*  Text translation (Text tab, text replies, dictation)                */
+/*  POST /api/translate/text                                            */
+/*                                                                      */
+/*  Input: `text` (string)  OR  an `audio` file (dictation: Whisper      */
+/*  first, then translate). No TTS, no voice credits. Capped per day:    */
+/*  50 for free users, 100 for Pro (see textDailyLimit.service.js).      */
+/* ------------------------------------------------------------------ */
+export const translateTextMessage = async (req, res) => {
+  const uid = req.user.uid;
+
+  const rawText = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+  const hasAudio = Boolean(req.file);
+
+  if (!rawText && !hasAudio) {
+    return res.status(400).json({
+      success: false,
+      message: "Text or audio is required.",
+      errorCode: "TEXT_REQUIRED",
+    });
+  }
+  if (rawText.length > MAX_TEXT_CHARS) {
+    return res.status(400).json({
+      success: false,
+      message: `Text is too long (max ${MAX_TEXT_CHARS} characters).`,
+      errorCode: "TEXT_TOO_LONG",
+    });
+  }
+  if (hasAudio && req.file.buffer.length > MAX_DICTATION_BYTES) {
+    return res.status(413).json({
+      success: false,
+      message: "Audio is too long. Please keep dictation short.",
+      errorCode: "AUDIO_TOO_LONG",
+    });
+  }
+
+  let claimed = false;
+  try {
+    // Pro users get a higher daily cap than free users.
+    let isPremium = false;
+    try {
+      const user = await User.findOne({ uid }).select("premium");
+      isPremium = user?.premium ?? false;
+    } catch (lookupError) {
+      console.error("Premium lookup failed for text limit, using free cap:", lookupError.message);
+    }
+
+    const claim = await claimTextSlot(uid, isPremium);
+    if (!claim.ok) {
+      return res.status(429).json({
+        success: false,
+        message: "You've hit today's text translation limit. Please come back tomorrow.",
+        errorCode: "TEXT_DAILY_LIMIT_REACHED",
+      });
+    }
+    claimed = true;
+
+    // Dictation: speech -> text first (the transcript is what gets translated
+    // and is also returned so the app can fill the input box).
+    let sourceText = rawText;
+    if (hasAudio) {
+      try {
+        sourceText = (await transcribeAudio(req.file.buffer)) || "";
+      } catch (err) {
+        err.errorCode = err.errorCode || "WHISPER_ERROR";
+        throw err;
+      }
+      sourceText = sourceText.trim();
+      if (!sourceText) {
+        await refundTextSlot(uid);
+        claimed = false;
+        return res.status(422).json({
+          success: false,
+          message: "No speech was detected. Please try again.",
+          errorCode: "NO_SPEECH_DETECTED",
+        });
+      }
+    }
+
+    const targetLanguage = req.body.targetLanguage || "English";
+    const requestedSource = String(req.body.sourceLanguageCode || "").trim().toLowerCase();
+
+    let detectedLanguage;
+    let translatedText;
+    try {
+      detectedLanguage =
+        requestedSource && requestedSource !== "auto"
+          ? requestedSource
+          : await detectLanguage(sourceText);
+      translatedText = await translateText(sourceText, detectedLanguage, targetLanguage);
+    } catch (err) {
+      err.errorCode = err.errorCode || "TRANSLATION_ERROR";
+      throw err;
+    }
+
+    return res.json({
+      success: true,
+      sourceText,
+      detectedLanguage,
+      translatedText,
+    });
+  } catch (error) {
+    console.error(error);
+    // The user got nothing: give the slot back.
+    if (claimed) await refundTextSlot(uid);
 
     return res.status(500).json({
       success: false,

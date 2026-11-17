@@ -32,6 +32,19 @@ export const EVENTS = {
   TRANSLATION_SUCCEEDED: "translation_succeeded",
   TRANSLATION_FAILED: "translation_failed",
 
+  // Text tab / text reply (typed, pasted or dictated text -> translated text).
+  // Never carry the text itself in params.
+  TEXT_TRANSLATE_STARTED: "text_translate_started",
+  TEXT_TRANSLATE_SUCCEEDED: "text_translate_succeeded",
+  TEXT_TRANSLATE_FAILED: "text_translate_failed",
+  TEXT_REPLY_TAPPED: "text_reply_tapped",
+  TEXT_DICTATION_STARTED: "text_dictation_started",
+  COPY_TAPPED: "copy_tapped",
+  // Settings -> Appearance: params.preference = system | light | dark.
+  APPEARANCE_CHANGED: "appearance_changed",
+  APP_ICON_CHANGED: "app_icon_changed",
+  MESSENGER_OPEN_TAPPED: "messenger_open_tapped",
+
   PAYWALL_VIEWED: "paywall_viewed",
   PLAN_SELECTED: "plan_selected",
   // Mobile paywall: plan tapped (params.plan, params.platform) and whether the
@@ -48,6 +61,14 @@ export const EVENTS = {
   PURCHASE_SURVEY_SHOWN: "purchase_survey_shown",
   PURCHASE_SURVEY_SUBMITTED: "purchase_survey_submitted",
   PURCHASE_SURVEY_SKIPPED: "purchase_survey_skipped",
+  BONUS_OFFER_SHOWN: "bonus_offer_shown",
+  BONUS_OFFER_CLAIMED: "bonus_offer_claimed",
+  BONUS_OFFER_DISMISSED: "bonus_offer_dismissed",
+  BONUS_OFFER_CLAIM_FAILED: "bonus_offer_claim_failed",
+  BONUS_REMINDER_SCHEDULED: "bonus_reminder_scheduled",
+  BONUS_REMINDER_OPENED: "bonus_reminder_opened",
+  PAYMENT_HELP_SHOWN: "payment_help_shown",
+  PAYMENT_HELP_ACTION: "payment_help_action",
   // Mobile: user started a free trial. Deliberately NOT purchase_completed, so
   // trials never count as paid conversions in the existing funnel.
   TRIAL_STARTED: "trial_started",
@@ -93,6 +114,8 @@ export const ERROR_TYPES = [
   "translation_error",
   "google_tts_error",
   "elevenlabs_error", // only if ELEVENLABS_ENABLED=true (off by default; see config/ttsProviders.js)
+  "daily_limit", // text_translate_failed: the 50/day text cap was hit
+  "no_speech", // text_translate_failed: dictation had no recognizable speech
   "unknown_error",
 ];
 
@@ -100,6 +123,6 @@ export const ERROR_TYPES = [
 // that array's length ever changes.
 export const ONBOARDING_SCREEN_COUNT = 4;
 
-export const PRODUCT_SCREENS = ["translate", "record", "history", "settings"];
+export const PRODUCT_SCREENS = ["translate", "record", "text", "history", "settings"];
 
 export const RETENTION_DAYS = [1, 3, 7, 14, 30];
