@@ -1,5 +1,6 @@
 import { generateSpeech as generateSpeechGoogle } from "./googleTts.service.js";
 import { resolveVoice } from "../config/voiceCatalog.js";
+import { hasElevenLabsKeys } from "./elevenlabsKeys.service.js";
 
 /**
  * Single entry point the rest of the backend calls for TTS. Routes to Google
@@ -55,7 +56,7 @@ export const generateTranslatedSpeech = async (
 
   // Google failed twice: fall back to ElevenLabs (when an API key is set)
   // before degrading to text-only.
-  if (process.env.ELEVENLABS_API_KEY) {
+  if (hasElevenLabsKeys()) {
     try {
       const { generateSpeech: generateSpeechElevenLabs } = await import("./elevenlabs.service.js");
       // ElevenLabs only knows "female"/"male"; our ids are e.g. "female_1".
@@ -67,7 +68,7 @@ export const generateTranslatedSpeech = async (
       console.error(`TTS fallback (ElevenLabs) failed for locale "${resolved.locale}":`, error.message);
     }
   } else {
-    console.error("TTS: Google failed and ELEVENLABS_API_KEY is not set, no fallback available.");
+    console.error("TTS: Google failed and no ElevenLabs key is set, no fallback available.");
   }
 
   console.error(
