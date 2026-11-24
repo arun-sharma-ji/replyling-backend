@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import CronState from "../models/CronState.js";
 import { TRIAL_ENDING_MESSAGES } from "../config/trialEndingMessages.js";
 import { REENGAGEMENT_MESSAGES } from "../config/reengagementMessages.js";
+import { SUPPORT_REPLY_MESSAGES } from "../config/supportReplyMessages.js";
 
 // NOTIFICATION POLICY: only FREE users get marketing pushes (re-engagement,
 // broadcasts) — they're the ones we want to convert. Trial and paid users get
@@ -71,7 +72,7 @@ async function clearStaleToken(uid) {
 // from the old FCM/raw-APNs architecture aren't valid Expo push tokens —
 // those get skipped (and cleared) rather than sent, so migration is
 // self-healing as users' apps re-register on their next cold start.
-async function sendPushNotification({ uid, token, title, body }) {
+async function sendPushNotification({ uid, token, title, body, data }) {
   if (!Expo.isExpoPushToken(token)) {
     await clearStaleToken(uid);
     return { ok: false, code: "invalid-token", message: "Not a valid Expo push token." };
@@ -82,7 +83,7 @@ async function sendPushNotification({ uid, token, title, body }) {
   let tickets;
   try {
     tickets = await expo.sendPushNotificationsAsync([
-      { to: token, sound: "default", title, body, channelId: ANDROID_NOTIFICATION_CHANNEL_ID },
+      { to: token, sound: "default", title, body, channelId: ANDROID_NOTIFICATION_CHANNEL_ID, ...(data ? { data } : {}) },
     ]);
   } catch (error) {
     console.error(`[push] Failed to notify ${uid}:`, error.message);
@@ -178,7 +179,29 @@ export async function runReengagementBatch() {
   return { ran: true, candidates: candidates.length, sent };
 }
 
-// The ONLY notification a trial user ever gets: one push when their free trial
+// Tells a user the team replied in Help & feedback. This is the second (and
+// last) exception to the "only free users get pushes" policy above: it is a
+// direct answer to a message the user themselves sent, so it goes to ANY user
+// (free, trial or paid) — and only when an admin actually replies. Never throws.
+export async function notifySupportReply(uid) {
+  try {
+    const user = await User.findOne({ uid }).select("uid pushToken appLanguage").lean();
+    if (!user?.pushToken) return { ok: false, reason: "no push token" };
+    const [title, body] = SUPPORT_REPLY_MESSAGES[user.appLanguage] || SUPPORT_REPLY_MESSAGES.en;
+    return await sendPushNotification({
+      uid,
+      token: user.pushToken,
+      title,
+      body,
+      data: { type: "support" },
+    });
+  } catch (error) {
+    console.error("[push] Support reply notify failed:", error.message);
+    return { ok: false, reason: error.message };
+  }
+}
+
+// The ONLY marketing-style notification a trial user ever gets: one push when their free trial
 // has <= TRIAL_REMINDER_HOURS left. Fires at most once per trial —
 // trialEndingNotifiedFor stores the premiumExpiresAt it was sent for, claimed
 // atomically before sending so concurrent/repeated pings can't double-send.

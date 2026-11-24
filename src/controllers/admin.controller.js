@@ -24,7 +24,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // admin-role concept on User yet. Set ADMIN_SECRET in .env; falls back to
 // CRON_SECRET so this works without extra config, but a dedicated
 // ADMIN_SECRET is recommended since the two protect very different things.
-function isAuthorized(req) {
+export function isAuthorized(req) {
   const secret = process.env.ADMIN_SECRET || process.env.CRON_SECRET || 'im12khore';
   return !!secret && req.query.secret === secret;
 }
