@@ -26,6 +26,8 @@ const getMe = async (req, res) => {
     // account can be upgraded in place to Google/Apple (same uid).
     $set: {
       lastActiveAt: new Date(),
+      // Back in the app: the re-engagement sequence starts over next time.
+      reengagementStage: 0,
       guest:
         req.user.firebase?.sign_in_provider === "anonymous" ||
         req.user.provider_id === "anonymous",

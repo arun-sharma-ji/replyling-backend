@@ -74,6 +74,21 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    // How many re-engagement pushes (0-4) the user has had in the current
+    // inactivity streak. Reset to 0 whenever they open the app (getMe).
+    reengagementStage: {
+      type: Number,
+      default: 0,
+    },
+
+    // The premiumExpiresAt value of the trial we already sent the one-time
+    // "trial ends tomorrow" push for. Equal to the current premiumExpiresAt =>
+    // already notified, so the reminder can never fire twice for one trial.
+    trialEndingNotifiedFor: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

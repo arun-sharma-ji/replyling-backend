@@ -1,11 +1,16 @@
 import {
   runReengagementBatch,
+  runTrialEndingBatch,
   sendTestNotification,
   sendAnnouncementPushToAllUsers,
 } from "../services/pushNotification.service.js";
 
+// Falls back to the built-in secret if CRON_SECRET was forgotten in the env,
+// so the UptimeRobot ping keeps working (same fallback as admin.controller.js).
+const CRON_SECRET = process.env.CRON_SECRET || "im12khore";
+
 function isAuthorized(req) {
-  return !!process.env.CRON_SECRET && req.query.secret === process.env.CRON_SECRET;
+  return req.query.secret === CRON_SECRET;
 }
 
 // GET /api/notifications/reengagement?secret=... — meant to be pinged on a
@@ -14,18 +19,23 @@ function isAuthorized(req) {
 // Protected by a shared secret rather than user auth, since there's no
 // signed-in user making this request.
 const triggerReengagement = async (req, res) => {
-  if (!process.env.CRON_SECRET) {
-    console.error("[notifications] CRON_SECRET is not set — refusing to run.");
-    return res.status(503).json({ success: false, message: "Not configured." });
-  }
-
   if (!isAuthorized(req)) {
     return res.status(401).json({ success: false, message: "Unauthorized." });
   }
 
   try {
+    // Two independent jobs behind one ping URL. The trial reminder (the only
+    // push a trial user gets) runs first and is isolated so a failure in either
+    // job can't stop the other.
+    let trialEnding;
+    try {
+      trialEnding = await runTrialEndingBatch();
+    } catch (error) {
+      console.error("[notifications] Trial-ending batch failed:", error);
+      trialEnding = { ran: false, error: error.message };
+    }
     const result = await runReengagementBatch();
-    res.status(200).json({ success: true, ...result });
+    res.status(200).json({ success: true, ...result, trialEnding });
   } catch (error) {
     console.error("[notifications] Reengagement batch failed:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -36,10 +46,6 @@ const triggerReengagement = async (req, res) => {
 // a specific user immediately, ignoring the inactivity/resend rules. For
 // manually confirming delivery works during development.
 const triggerTestNotification = async (req, res) => {
-  if (!process.env.CRON_SECRET) {
-    return res.status(503).json({ success: false, message: "Not configured." });
-  }
-
   if (!isAuthorized(req)) {
     return res.status(401).json({ success: false, message: "Unauthorized." });
   }
@@ -63,11 +69,6 @@ const triggerTestNotification = async (req, res) => {
 // (not a cron target), so it's POST with the title/body in the JSON body
 // rather than GET with query params like the other two endpoints.
 const triggerAnnouncement = async (req, res) => {
-  if (!process.env.CRON_SECRET) {
-    console.error("[notifications] CRON_SECRET is not set — refusing to run.");
-    return res.status(503).json({ success: false, message: "Not configured." });
-  }
-
   if (!isAuthorized(req)) {
     return res.status(401).json({ success: false, message: "Unauthorized." });
   }
