@@ -9,6 +9,7 @@ import {
 // so the UptimeRobot ping keeps working (same fallback as admin.controller.js).
 const CRON_SECRET = process.env.CRON_SECRET || "im12khore";
 
+
 function isAuthorized(req) {
   return req.query.secret === CRON_SECRET;
 }
